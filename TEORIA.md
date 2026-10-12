@@ -2,67 +2,54 @@
 
 ## 1. Express vs NestJS
 
-**Express** es un framework minimalista: da el enrutamiento y la cadena de middlewares, y todo lo demás (estructura de carpetas, validación, inyección de dependencias, testing) lo decide el equipo. **NestJS** corre encima de Express (o Fastify) y agrega una arquitectura opinada inspirada en Angular: módulos, controladores y providers, inyección de dependencias, decoradores, y piezas estándar para el ciclo de la petición (pipes para validar, guards para autorizar, interceptors y exception filters).
+Express es la base: te da el enrutamiento y la forma de levantar un servidor en Node, y casi todo lo demás lo tienes que armar tú. NestJS corre encima de Express pero ya trae el paquete completo: módulos, inyección de dependencias, guards para autenticación, pipes para validar y una estructura definida de controllers y services.
 
-Usaría **Express** para servicios pequeños o muy acotados: un webhook, un microservicio de una sola responsabilidad, un prototipo, o cuando el rendimiento y el tamaño importan más que la estructura. Usaría **NestJS** en aplicaciones medianas o grandes, con varios desarrolladores, muchos dominios o vida larga, porque la convención reduce las decisiones repetidas y hace el código predecible y fácil de probar (los providers se sustituyen por mocks con la DI). Es lo que uso en el trabajo para un backend multi-tenant: los módulos por dominio y los guards compartidos evitan que cada endpoint resuelva la autenticación y el tenant a su manera.
+En el trabajo usamos NestJS en un backend grande y se nota la diferencia: todos sabemos dónde va cada cosa, la autenticación vive en un guard y no se repite en cada ruta, y gracias a la inyección de dependencias es fácil probar un service sustituyendo lo que usa. Además, viniendo de Angular, los decoradores y los módulos se sienten muy familiares.
+
+Usaría Express para probar una idea o hacer un ejercicio rápido, donde la estructura de Nest sería más de lo que hace falta. Para un proyecto que va a crecer o donde trabaja un equipo, me quedo con NestJS.
 
 ## 2. SQL vs NoSQL
 
-Un motor **relacional** (PostgreSQL) guarda datos en tablas con un esquema definido, relaciona entidades con llaves foráneas y joins, y garantiza transacciones ACID. Escala principalmente en vertical, aunque también admite réplicas de lectura y particionamiento. Un motor **no relacional** de documentos (MongoDB) guarda documentos JSON/BSON con esquema flexible, favorece embeber los datos que se leen juntos, y está pensado para escalar en horizontal con sharding. Históricamente ha relajado la consistencia y las transacciones entre documentos, aunque hoy ya las soporta.
+La diferencia principal es que una base relacional como PostgreSQL pone reglas: tablas con columnas definidas, relaciones entre ellas (una venta tiene que apuntar a un producto que exista) y transacciones, que hacen que si algo falla a la mitad se deshaga todo. Una base NoSQL como MongoDB guarda documentos tipo JSON sin un esquema obligatorio: es más flexible, pero las reglas las tienes que cuidar tú en el código.
 
-Para una app de tareas a gran escala tomaría en cuenta:
+Lo he vivido de los dos lados. Mi punto de venta está en PostgreSQL porque maneja ventas, productos y clientes que se cruzan todo el tiempo, y con dinero de por medio necesito que todo cuadre. Mongo lo he usado poco, en un chat interno y en algunas pruebas; con Firebase me tocó algo parecido, y lo que menos me gustó fue justo eso: que no había restricciones.
 
-- **Forma de los datos y relaciones:** tareas, usuarios, equipos, permisos y etiquetas son muy relacionales y se consultan cruzados, lo que favorece SQL.
-- **Consistencia:** asignaciones, permisos y conteos piden transacciones confiables.
-- **Patrones de consulta:** filtros, ordenamiento, paginación y reportes, que SQL resuelve bien con índices compuestos.
-- **Volumen y escritura:** si el cuello de botella fuera un volumen enorme de escrituras con esquema cambiante (por ejemplo, un historial de actividad), un documental o una tabla particionada para esa parte.
-- **Equipo y operación:** experiencia del equipo, herramientas y costo de operar el motor.
-
-Para este caso elegí **PostgreSQL**: es relacional por naturaleza, y con índices, particionamiento y réplicas de lectura escala bastante antes de necesitar otra cosa.
+Para una app de tareas a gran escala tomaría en cuenta qué tan relacionados están los datos (tareas, usuarios, equipos, permisos), si necesito consistencia, y qué consultas voy a hacer (filtros, paginación, reportes). Por eso elegí PostgreSQL. Mongo lo usaría para partes donde cada registro vive casi solo y su forma cambia, como los mensajes de un chat o un historial de actividad.
 
 ## 3. Middleware de autenticación y JWT
 
-**Ciclo de una petición:** el cliente envía la petición HTTP. El servidor la pasa por la cadena de middlewares en orden; cada uno puede leer o modificar la petición, responder él mismo y cortar la cadena, o llamar a `next()`. El middleware de autenticación lee la credencial (por ejemplo, el header `Authorization`) y la valida. Si no es válida responde **401** y la petición nunca llega al controlador. Si es válida, puede adjuntar la identidad a la petición (`req.user`) y llamar a `next()`. Después siguen, en Nest, los guards (autorización), pipes (validación) y el controlador, y la respuesta regresa por los interceptors.
+Cuando llega una petición, pasa por los middlewares en orden antes de llegar al controller. El middleware de autenticación revisa el header (por ejemplo, Authorization), y si el token no es válido responde 401 y la petición nunca llega al controller. Si es válido, la deja pasar con next(). En esta prueba así funciona: el middleware revisa el token fijo antes de cualquier ruta de /tareas.
 
-**Flujo JWT:**
+El flujo con JWT, como lo uso en mi punto de venta con Supabase Auth:
 
-1. El usuario se autentica (por ejemplo, con correo y contraseña).
-2. El servidor genera un token firmado (HS256 con un secreto, o RS256 con llave privada). El token lleva claims como `sub`, roles y `exp`.
-3. El cliente lo envía en cada petición: `Authorization: Bearer <token>`.
-4. El middleware o guard verifica la firma y la expiración, sin consultar la base de datos, y extrae la identidad.
-5. Al expirar, se renueva con un refresh token de vida más larga, que sí se valida contra el servidor y se puede revocar.
+1. El usuario inicia sesión y el backend le regresa un token JWT firmado.
+2. El front guarda ese token y lo manda en cada petición en el header Authorization: Bearer <token>.
+3. El backend verifica la firma y la fecha de expiración, y con eso sabe quién es el usuario.
 
-**Por qué se prefiere en REST:** es **stateless**, igual que REST. El servidor no guarda sesiones, cualquier instancia puede validar el token, y eso facilita escalar en horizontal y repartir carga. Además es un estándar que funciona igual en web, móvil y entre servicios. Lo que hay que cuidar es que el payload se puede leer (está firmado, no cifrado), así que no se ponen datos sensibles. También conviene usar expiraciones cortas, porque un token emitido no se revoca sin un mecanismo extra.
+Se prefiere en APIs REST porque el servidor no tiene que guardar sesiones: el token trae la información y solo se verifica. Funciona igual en web y en móvil (lo he usado así en apps con Ionic), y expira solo, porque la fecha de vencimiento viene dentro del token.
 
-En esta prueba usé un token fijo porque así lo pide el enunciado. No viaja al navegador: el servidor de Nuxt lo agrega al reenviar cada petición.
+En esta prueba el token es fijo porque así lo pedía el enunciado, pero no lo expuse en el navegador: el servidor de Nuxt lo agrega al reenviar cada petición a la API.
 
 ## 4. Pinia vs props y eventos
 
-Pasar props hacia abajo y emitir eventos hacia arriba funciona bien entre padre e hijo. Cuando varios componentes alejados en el árbol necesitan el mismo dato, aparecen estos problemas:
+Pasar props de padre a hijo y emitir eventos hacia arriba funciona bien entre dos niveles. El problema empieza cuando varios componentes lejanos necesitan el mismo dato: terminas pasando props por componentes que ni los usan, reemitiendo eventos nivel por nivel, y cada parte puede quedarse con una copia distinta del dato.
 
-- **Prop drilling:** componentes intermedios reciben y reenvían props que no usan, solo para que lleguen más abajo.
-- **Cadenas de eventos:** para que un cambio suba, hay que reemitirlo nivel por nivel. Es frágil y difícil de rastrear.
-- **Estado duplicado o desincronizado:** cada rama guarda su copia y terminan mostrando cosas distintas.
-- **Acoplamiento a la estructura:** mover un componente de lugar obliga a recablear props y eventos.
+Pinia resuelve eso con un store central: una sola fuente de verdad que cualquier componente puede leer o modificar directamente, y todos se actualizan solos porque es reactivo. La lógica también sale de los componentes y queda en las acciones del store.
 
-**Pinia** centraliza el estado en stores: una sola fuente de verdad, con `state`, `getters` y `actions`, a la que cualquier componente accede directamente y de forma reactiva. La lógica de negocio sale de los componentes y queda en las actions, que se prueban aisladas. Con TypeScript está tipado de extremo a extremo, se inspecciona en Vue Devtools y en Nuxt se integra con SSR: el estado que se carga en el servidor se serializa y se hidrata en el cliente. En este proyecto el store de tareas concentra la lista, la paginación y los filtros, y los componentes solo leen y disparan acciones.
+En Angular resuelvo lo mismo con services y BehaviorSubject, con signals o con NgRx según el proyecto, así que Pinia me resultó la misma idea aplicada a Vue. En esta prueba el store de tareas guarda la lista, la paginación, los filtros y los contadores, y los componentes solo leen y llaman acciones.
 
 ## 5. SPA vs SSR (Nuxt 3)
 
-- **SPA (Single Page Application):** el servidor manda un HTML casi vacío y el bundle de JavaScript. El navegador descarga, ejecuta y pide los datos, y entonces pinta. Después navega sin recargar la página.
-- **SSR (Server-Side Rendering):** el servidor ejecuta la app en cada petición y manda el HTML ya renderizado con los datos. En el cliente, Vue "hidrata" ese HTML (le conecta la reactividad y los eventos) y a partir de ahí se comporta como SPA. Nuxt 3 lo hace por defecto y permite mezclar estrategias por ruta (`routeRules`: SSR, prerender, ISR o solo cliente).
+En una SPA el servidor manda un HTML casi vacío y el navegador tiene que descargar y ejecutar el JavaScript para pintar la página y pedir los datos. Con SSR el servidor arma la página con los datos y manda el HTML listo; después Vue "hidrata" esa página en el navegador y sigue funcionando como una SPA.
 
-**Ventajas de SSR con Nuxt 3:**
+Ventajas de SSR con Nuxt 3:
 
-- **SEO:** los buscadores y los previews de redes sociales reciben el contenido y las meta etiquetas en el HTML, sin depender de que ejecuten JavaScript.
-- **First Contentful Paint más rápido:** el usuario ve contenido real en cuanto llega el HTML, sin esperar a que se descargue y ejecute el bundle ni a que terminen las peticiones de datos. Se nota sobre todo en móviles y redes lentas.
-- **Datos en el servidor:** las llamadas a la API ocurren cerca del backend y pueden usar secretos que nunca llegan al cliente (aquí, el token).
+- SEO: los buscadores reciben el contenido ya en el HTML. Para mi blog investigué opciones y elegí Astro justo por eso, porque para contenido y SEO funciona mejor que una SPA.
+- First Contentful Paint más rápido: el usuario ve contenido en cuanto llega el HTML, sin esperar a que cargue todo el JavaScript.
 
-**Desventajas:**
+Desventajas:
 
-- **Más carga y costo en el servidor:** se renderiza en cada petición, así que hace falta un servidor Node (o funciones), no solo hosting estático, y planear caché.
-- **TTFB puede subir:** el servidor espera los datos antes de responder.
-- **Hidratación:** hasta que termina, la página se ve lista pero todavía no responde. Si el HTML del servidor y el del cliente no coinciden aparecen *hydration mismatches*.
-- **Complejidad:** el código corre en dos entornos, así que no se puede usar `window` ni `localStorage` en el servidor, y las librerías solo de navegador se cargan del lado del cliente. Por eso SweetAlert2 se importa de forma dinámica en este proyecto.
+- El código corre en el servidor y en el navegador, y en el servidor no existen window ni localStorage. En esta prueba me pasó con SweetAlert2: lo cargué de forma dinámica para que solo se use en el navegador.
+- Necesitas un servidor corriendo (no basta un hosting estático), lo que significa más costo y más cosas que mantener.
 
-Para una lista de tareas privada detrás de login, el SEO no importa tanto. Aun así elegí SSR para que la primera pintura ya traiga las tareas y para mantener el token en el servidor.
+Para esta app de tareas el SEO no es tan importante, pero usé SSR para que la lista llegue ya cargada y para mantener el token en el servidor.
