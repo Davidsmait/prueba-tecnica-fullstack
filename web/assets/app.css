@@ -1,0 +1,92 @@
+body {
+  background: #f5f6f8;
+}
+
+.tarea-card {
+  border-left: 4px solid var(--bs-border-color);
+  transition: box-shadow 0.15s ease, background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.tarea-card:hover {
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.08);
+}
+
+.tarea-completada {
+  border-left-color: var(--bs-success);
+  background-color: var(--bs-success-bg-subtle);
+  animation: completar 0.4s ease;
+}
+
+.tarea-completada .tarea-titulo {
+  text-decoration: line-through;
+  color: var(--bs-secondary-color);
+}
+
+.btn-completar {
+  min-width: 7.5rem;
+}
+
+.adjunto {
+  text-decoration: none;
+}
+
+.filtros .nav-link {
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filtros .nav-link.active {
+  color: var(--bs-emphasis-color);
+  font-weight: 600;
+}
+
+.filtros .badge {
+  font-weight: 500;
+}
+
+@media (max-width: 575.98px) {
+  .filtros {
+    --bs-nav-underline-gap: 0;
+    justify-content: space-between;
+  }
+
+  .filtros .nav-link {
+    font-size: 0.875rem;
+    gap: 0.25rem;
+    padding-inline: 0.25rem;
+  }
+}
+
+.modal-abierto {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.lista-move,
+.lista-enter-active,
+.lista-leave-active {
+  transition: all 0.3s ease;
+}
+
+.lista-enter-from,
+.lista-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+@keyframes completar {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarea-completada,
+  .lista-move,
+  .lista-enter-active,
+  .lista-leave-active {
+    animation: none;
+    transition: none;
+  }
+}

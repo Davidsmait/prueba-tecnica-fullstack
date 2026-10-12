@@ -1,0 +1,27 @@
+{
+  "name": "web-tareas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.0",
+    "@vuelidate/core": "^2.0.3",
+    "@vuelidate/validators": "^2.0.4",
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.13.2",
+    "nuxt": "^3.17.0",
+    "pinia": "^3.0.0",
+    "sweetalert2": "^11.14.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

@@ -1,0 +1,23 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tarea {
+  id             Int      @id @default(autoincrement())
+  titulo         String   @db.VarChar(120)
+  descripcion    String?  @db.Text
+  completado     Boolean  @default(false)
+  fechaCreacion  DateTime @default(now()) @map("fecha_creacion")
+  adjuntoNombre  String?  @map("adjunto_nombre")
+  adjuntoArchivo String?  @map("adjunto_archivo")
+  adjuntoMime    String?  @map("adjunto_mime")
+
+  @@index([completado])
+  @@map("tareas")
+}

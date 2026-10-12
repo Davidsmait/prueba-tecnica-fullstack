@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tareas
+      POSTGRES_PASSWORD: tareas
+      POSTGRES_DB: tareas
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tareas"]
+      interval: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql://tareas:tareas@db:5432/tareas?schema=public
+      API_TOKEN: ${API_TOKEN:-cambia-este-token}
+      PORT: 3001
+      UPLOAD_DIR: /app/uploads
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3001:3001"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 3s
+      retries: 20
+
+  web:
+    build: ./web
+    environment:
+      NUXT_API_BASE: http://api:3001
+      NUXT_API_TOKEN: ${API_TOKEN:-cambia-este-token}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  uploads:
